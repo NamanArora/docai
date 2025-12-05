@@ -76,13 +76,16 @@ docai/
 │   ├── components/     # React components
 │   ├── hooks/          # Custom React hooks
 │   ├── lib/            # Utility libraries
-│   │   ├── utils.ts    # General utilities
-│   │   └── supabase.ts # Supabase client & helpers
+│   │   ├── utils.ts        # General utilities (Tailwind cn)
+│   │   ├── supabase.ts     # Supabase client & helpers
+│   │   ├── url-utils.ts    # URL normalization & validation
+│   │   └── chunking.ts     # Markdown chunking logic
 │   ├── types/          # TypeScript type definitions
 │   ├── App.tsx         # Main app component
 │   ├── main.tsx        # Entry point
 │   └── index.css       # Global styles
 ├── supabase-schema.sql # Database schema
+├── vitest.config.ts    # Vitest test configuration
 ├── CLAUDE.md           # Claude Code guidance
 └── prd.md              # Product Requirements Document
 ```
@@ -97,12 +100,19 @@ docai/
 - Database schema created
 - Basic project structure in place
 
+**Milestone 2 Complete** ✓
+- URL utilities: normalize, compute document key, validate scope
+- Markdown link extraction
+- Chunking logic with smart boundary detection (700-900 chars, 100 char overlap)
+- Comprehensive test suite with Vitest (42 tests passing)
+- All utilities tested and ready for integration
+
 ## Next Steps
 
 See the development plan in `.claude/plans/jazzy-toasting-teapot.md` for upcoming milestones:
-- Milestone 2: URL Utilities & Core Logic
-- Milestone 3: Client-Side Embeddings
-- Milestone 4: Crawling System
+- Milestone 3: Client-Side Embeddings (Transformers.js integration)
+- Milestone 4: Jina Reader Integration & Crawling System
+- Milestone 5: Basic UI Components
 - And more...
 
 ## License
