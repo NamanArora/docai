@@ -75,13 +75,15 @@ docai/
 ├── src/
 │   ├── components/     # React components
 │   ├── hooks/          # Custom React hooks
+│   │   └── useEmbeddings.ts    # Embedding model lifecycle hook
 │   ├── lib/            # Utility libraries
 │   │   ├── utils.ts        # General utilities (Tailwind cn)
 │   │   ├── supabase.ts     # Supabase client & helpers
 │   │   ├── url-utils.ts    # URL normalization & validation
-│   │   └── chunking.ts     # Markdown chunking logic
+│   │   ├── chunking.ts     # Markdown chunking logic
+│   │   └── embeddings.ts   # Client-side embedding generation
 │   ├── types/          # TypeScript type definitions
-│   ├── App.tsx         # Main app component
+│   ├── App.tsx         # Main app component (with embedding test UI)
 │   ├── main.tsx        # Entry point
 │   └── index.css       # Global styles
 ├── supabase-schema.sql # Database schema
@@ -107,12 +109,21 @@ docai/
 - Comprehensive test suite with Vitest (42 tests passing)
 - All utilities tested and ready for integration
 
+**Milestone 3 Complete** ✓
+- Transformers.js integration with all-MiniLM-L6-v2 model
+- Browser-based embedding generation (384 dimensions)
+- Lazy-loaded model with WebGPU/WASM fallback
+- useEmbeddings React hook for model lifecycle
+- Browser compatibility detection
+- Interactive test UI for embedding generation
+- Full error handling and loading states
+
 ## Next Steps
 
 See the development plan in `.claude/plans/jazzy-toasting-teapot.md` for upcoming milestones:
-- Milestone 3: Client-Side Embeddings (Transformers.js integration)
 - Milestone 4: Jina Reader Integration & Crawling System
 - Milestone 5: Basic UI Components
+- Milestone 6: Vector Search & RAG Integration
 - And more...
 
 ## License
