@@ -75,15 +75,17 @@ docai/
 ├── src/
 │   ├── components/     # React components
 │   ├── hooks/          # Custom React hooks
-│   │   └── useEmbeddings.ts    # Embedding model lifecycle hook
+│   │   ├── useEmbeddings.ts    # Embedding model lifecycle hook
+│   │   └── useCrawler.ts       # Documentation crawler hook
 │   ├── lib/            # Utility libraries
 │   │   ├── utils.ts        # General utilities (Tailwind cn)
 │   │   ├── supabase.ts     # Supabase client & helpers
 │   │   ├── url-utils.ts    # URL normalization & validation
 │   │   ├── chunking.ts     # Markdown chunking logic
-│   │   └── embeddings.ts   # Client-side embedding generation
+│   │   ├── embeddings.ts   # Client-side embedding generation
+│   │   └── jina-client.ts  # Jina AI Reader API client
 │   ├── types/          # TypeScript type definitions
-│   ├── App.tsx         # Main app component (with embedding test UI)
+│   ├── App.tsx         # Main app component (with crawler test UI)
 │   ├── main.tsx        # Entry point
 │   └── index.css       # Global styles
 ├── supabase-schema.sql # Database schema
@@ -118,12 +120,23 @@ docai/
 - Interactive test UI for embedding generation
 - Full error handling and loading states
 
+**Milestone 4 Complete** ✓
+- Jina AI Reader API integration for markdown extraction
+- Complete BFS crawling system (max 300 discovered, 100 processed, depth 3)
+- useCrawler hook orchestrating full pipeline (fetch → chunk → embed → upsert)
+- Real-time progress tracking (discovered/processed/failed/chunks)
+- URL scope validation and error handling
+- Automatic document deduplication (checks Supabase before crawling)
+- Interactive crawler UI with live progress display
+- Failed URL tracking with detailed error messages
+- Graceful partial crawl support (≥5 chunks required)
+
 ## Next Steps
 
 See the development plan in `.claude/plans/jazzy-toasting-teapot.md` for upcoming milestones:
-- Milestone 4: Jina Reader Integration & Crawling System
-- Milestone 5: Basic UI Components
+- Milestone 5: Basic UI Components (UrlInput, CrawlProgress components)
 - Milestone 6: Vector Search & RAG Integration
+- Milestone 7: Chat Interface
 - And more...
 
 ## License
