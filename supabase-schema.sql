@@ -42,7 +42,7 @@ WITH (lists = 100);
 -- Returns the top k most similar document sections based on cosine similarity
 CREATE OR REPLACE FUNCTION match_sections(
   query_embedding vector(384),
-  document_id UUID,
+  filter_document_id UUID,
   match_count INT DEFAULT 5
 )
 RETURNS TABLE (
@@ -65,7 +65,7 @@ BEGIN
     document_sections.content,
     1 - (document_sections.embedding <=> query_embedding) AS similarity
   FROM document_sections
-  WHERE document_sections.document_id = match_sections.document_id
+  WHERE document_sections.document_id = filter_document_id
     AND 1 - (document_sections.embedding <=> query_embedding) > 0.15
   ORDER BY document_sections.embedding <=> query_embedding
   LIMIT match_count;

@@ -42,7 +42,7 @@ A serverless single-page application that enables users to chat with any documen
 - Index: ivfflat on `embedding` with `vector_cosine_ops`
 
 ### RPC Functions
-- `match_sections(query_embedding vector(384), document_id uuid, match_count int)`: Returns top-k similar chunks using cosine similarity (threshold: 0.15, default k=5)
+- `match_sections(query_embedding vector(384), filter_document_id uuid, match_count int)`: Returns top-k similar chunks using cosine similarity (threshold: 0.15, default k=5)
 
 ## Key Implementation Components
 
