@@ -30,8 +30,11 @@ export interface CrawlProgress {
   discovered: number
   processed: number
   failed: number
-  status: 'idle' | 'crawling' | 'completed' | 'error'
+  chunksCreated: number
+  status: 'idle' | 'checking' | 'crawling' | 'completed' | 'error'
   message?: string
+  currentUrl?: string
+  failedUrls?: Array<{ url: string; error: string }>
 }
 
 export type LLMProvider = 'openai' | 'anthropic' | 'custom'
