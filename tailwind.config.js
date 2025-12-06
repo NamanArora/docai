@@ -46,6 +46,22 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        parchment: {
+          DEFAULT: "hsl(var(--parchment))",
+          dark: "hsl(var(--parchment-dark))",
+        },
+        ink: {
+          DEFAULT: "hsl(var(--ink))",
+          light: "hsl(var(--ink-light))",
+        },
+        amber: {
+          DEFAULT: "hsl(var(--amber))",
+          light: "hsl(var(--amber-light))",
+        },
+        teal: {
+          DEFAULT: "hsl(var(--teal))",
+          light: "hsl(var(--teal-light))",
+        },
       }
     }
   },

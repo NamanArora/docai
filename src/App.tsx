@@ -1,290 +1,394 @@
-import { useState } from 'react'
-import { useEmbeddings } from './hooks/useEmbeddings'
+import { useState, useEffect, useRef } from 'react'
 import { useCrawler } from './hooks/useCrawler'
-import { generateEmbedding } from './lib/embeddings'
+import { useChat } from './hooks/useChat'
+import { useToast } from './hooks/useToast'
+import { UrlInput } from './components/UrlInput'
+import { CrawlProgressDisplay } from './components/CrawlProgress'
+import { Chat } from './components/Chat'
+import { ToastContainer } from './components/Toast'
+import { validateApiKey, type LLMProvider } from './lib/llm-client'
+
+type Mode = 'crawl' | 'config' | 'chat'
 
 function App() {
-  const { status: embeddingStatus, isSupported, initialize } = useEmbeddings()
   const { progress, document, startCrawl, reset } = useCrawler()
+  const [url, setUrl] = useState('https://docs.stripe.com/payments')
+  const [mode, setMode] = useState<Mode>('crawl')
+  const toast = useToast()
+  const prevStatusRef = useRef(progress.status)
 
-  const [testUrl, setTestUrl] = useState('https://docs.stripe.com/payments')
-  const [testText, setTestText] = useState('Hello, world!')
-  const [embedding, setEmbedding] = useState<number[] | null>(null)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // LLM Configuration
+  const [llmProvider, setLlmProvider] = useState<LLMProvider>('openai')
+  const [apiKey, setApiKey] = useState('')
+  const [configError, setConfigError] = useState('')
 
-  // Handle crawl start
-  const handleStartCrawl = async () => {
-    if (!testUrl.trim()) return
-    await startCrawl(testUrl)
-  }
-
-  // Handle embedding generation test
-  const handleGenerateEmbedding = async () => {
-    setIsGenerating(true)
-    setError(null)
-    setEmbedding(null)
-
-    try {
-      const result = await generateEmbedding(testText)
-      setEmbedding(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate embedding')
-    } finally {
-      setIsGenerating(false)
+  // Chat hook - only initialize if we have a document
+  const chatHook = useChat({
+    documentId: document?.id || '',
+    llmConfig: {
+      provider: llmProvider,
+      apiKey: apiKey
     }
+  })
+
+  // Show toast notifications on status changes
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current
+    const currentStatus = progress.status
+
+    if (prevStatus !== currentStatus) {
+      if (currentStatus === 'completed') {
+        toast.success(progress.message || 'Documentation indexed successfully!')
+      } else if (currentStatus === 'error') {
+        toast.error(progress.message || 'Crawl failed')
+      }
+
+      prevStatusRef.current = currentStatus
+    }
+  }, [progress.status, progress.message, toast])
+
+  const handleStartCrawl = async () => {
+    if (!url.trim()) return
+    await startCrawl(url)
   }
+
+  const handleReset = () => {
+    reset()
+    setMode('crawl')
+    chatHook.clearMessages()
+    toast.info('Reset to start new crawl')
+  }
+
+  const handleStartChat = () => {
+    setConfigError('')
+
+    if (!validateApiKey(llmProvider, apiKey)) {
+      setConfigError('Invalid API key format. Please check your API key.')
+      return
+    }
+
+    setMode('chat')
+    toast.success('Chat mode activated')
+  }
+
+  const isLoading = progress.status === 'crawling' || progress.status === 'checking'
+  const isIdle = progress.status === 'idle'
+  const isCrawlComplete = progress.status === 'completed' && document
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">
-          DocAI
-        </h1>
-        <p className="text-gray-600 mb-8">
-          Chat with any documentation
-        </p>
-
-        {/* Crawler Test UI */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-4">Documentation Crawler</h2>
-
-          {/* URL Input */}
-          <div className="space-y-4 mb-6">
+    <>
+      <ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
+      <div className="min-h-screen bg-background paper-texture">
+        {/* Header */}
+        <header className="border-b-2 border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
             <div>
-              <label htmlFor="doc-url" className="block text-sm font-medium mb-2">
-                Documentation URL:
-              </label>
-              <input
-                id="doc-url"
-                type="url"
-                value={testUrl}
-                onChange={(e) => setTestUrl(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="https://docs.example.com"
-                disabled={progress.status === 'crawling' || progress.status === 'checking'}
-              />
+              <h1 className="text-4xl font-bold text-ink mb-1">
+                DocAI
+              </h1>
+              <p className="text-sm text-ink-light italic">
+                Technical Documentation Archive & Retrieval System
+              </p>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={handleStartCrawl}
-                disabled={progress.status === 'crawling' || progress.status === 'checking' || !testUrl.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {progress.status === 'crawling' ? 'Crawling...' : progress.status === 'checking' ? 'Checking...' : 'Start Crawl'}
-              </button>
-
-              {progress.status !== 'idle' && (
-                <button
-                  onClick={reset}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
-                >
-                  Reset
-                </button>
-              )}
+            <div className="flex items-center gap-2 text-xs mono text-ink-light">
+              <span className="px-2 py-1 bg-amber-light border border-amber/30 rounded">
+                v1.0
+              </span>
+              <span className="px-2 py-1 bg-teal-light border border-teal/30 rounded">
+                BETA
+              </span>
             </div>
           </div>
-
-          {/* Progress Display */}
-          {progress.status !== 'idle' && (
-            <div className="space-y-4">
-              {/* Status Badge */}
-              <div>
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                  progress.status === 'checking' ? 'bg-blue-100 text-blue-800' :
-                  progress.status === 'crawling' ? 'bg-yellow-100 text-yellow-800' :
-                  progress.status === 'completed' ? 'bg-green-100 text-green-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {progress.status === 'checking' && 'Checking'}
-                  {progress.status === 'crawling' && 'Crawling'}
-                  {progress.status === 'completed' && 'Completed'}
-                  {progress.status === 'error' && 'Error'}
-                </span>
-              </div>
-
-              {/* Message */}
-              {progress.message && (
-                <p className="text-sm text-gray-700">{progress.message}</p>
-              )}
-
-              {/* Current URL */}
-              {progress.currentUrl && progress.status === 'crawling' && (
-                <p className="text-xs text-gray-500 truncate">
-                  Current: {progress.currentUrl}
-                </p>
-              )}
-
-              {/* Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-blue-50 p-3 rounded">
-                  <p className="text-xs text-blue-600 font-medium">Discovered</p>
-                  <p className="text-2xl font-bold text-blue-900">{progress.discovered}</p>
-                </div>
-                <div className="bg-green-50 p-3 rounded">
-                  <p className="text-xs text-green-600 font-medium">Processed</p>
-                  <p className="text-2xl font-bold text-green-900">{progress.processed}</p>
-                </div>
-                <div className="bg-purple-50 p-3 rounded">
-                  <p className="text-xs text-purple-600 font-medium">Chunks</p>
-                  <p className="text-2xl font-bold text-purple-900">{progress.chunksCreated}</p>
-                </div>
-                <div className="bg-red-50 p-3 rounded">
-                  <p className="text-xs text-red-600 font-medium">Failed</p>
-                  <p className="text-2xl font-bold text-red-900">{progress.failed}</p>
-                </div>
-              </div>
-
-              {/* Document Info */}
-              {document && (
-                <div className="bg-gray-50 p-4 rounded">
-                  <p className="text-sm font-medium text-gray-700">Document ID:</p>
-                  <p className="text-xs text-gray-600 font-mono break-all">{document.id}</p>
-                  <p className="text-sm font-medium text-gray-700 mt-2">Document Key:</p>
-                  <p className="text-xs text-gray-600">{document.document_key}</p>
-                </div>
-              )}
-
-              {/* Failed URLs */}
-              {progress.failedUrls && progress.failedUrls.length > 0 && (
-                <details className="bg-red-50 p-4 rounded">
-                  <summary className="cursor-pointer text-sm font-medium text-red-900">
-                    Failed URLs ({progress.failedUrls.length})
-                  </summary>
-                  <ul className="mt-2 space-y-2 text-xs">
-                    {progress.failedUrls.slice(0, 10).map((item, idx) => (
-                      <li key={idx} className="text-red-700">
-                        <span className="font-mono">{item.url}</span>
-                        <br />
-                        <span className="text-red-600">{item.error}</span>
-                      </li>
-                    ))}
-                    {progress.failedUrls.length > 10 && (
-                      <li className="text-red-600">
-                        ... and {progress.failedUrls.length - 10} more
-                      </li>
-                    )}
-                  </ul>
-                </details>
-              )}
-            </div>
-          )}
         </div>
+      </header>
 
-        {/* Embedding Model Test UI */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-4">Embedding Model Test</h2>
-
-          {/* Browser Support Status */}
-          <div className="mb-4">
-            <p className="text-sm font-medium mb-2">Browser Support:</p>
-            <span className={`inline-block px-3 py-1 rounded-full text-sm ${
-              isSupported
-                ? 'bg-green-100 text-green-800'
-                : 'bg-red-100 text-red-800'
-            }`}>
-              {isSupported ? '✓ Supported' : '✗ Not Supported'}
-            </span>
-          </div>
-
-          {/* Model Status */}
-          <div className="mb-4">
-            <p className="text-sm font-medium mb-2">Model Status:</p>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Loading:</span>
-                <span className={`font-medium ${embeddingStatus.loading ? 'text-blue-600' : 'text-gray-400'}`}>
-                  {embeddingStatus.loading ? 'Yes' : 'No'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Loaded:</span>
-                <span className={`font-medium ${embeddingStatus.loaded ? 'text-green-600' : 'text-gray-400'}`}>
-                  {embeddingStatus.loaded ? 'Yes' : 'No'}
-                </span>
-              </div>
-              {embeddingStatus.error && (
-                <div className="text-sm text-red-600">
-                  Error: {embeddingStatus.error.message}
-                </div>
-              )}
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-12 max-w-6xl">
+        {/* Mode: Crawl */}
+        {mode === 'crawl' && (
+          <>
+            {/* Catalog Header */}
+            <div className="catalog-header fade-in">
+              <h2 className="text-2xl font-semibold text-ink mb-2">
+                Documentation Catalog
+              </h2>
+              <p className="text-ink-light leading-relaxed">
+                Index technical documentation from any source. Our client-side crawling system
+                processes and embeds documentation for intelligent retrieval.
+              </p>
             </div>
-          </div>
 
-          {/* Initialize Button */}
-          {!embeddingStatus.loaded && !embeddingStatus.loading && isSupported && (
-            <button
-              onClick={initialize}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors mb-4"
-            >
-              Initialize Model
-            </button>
-          )}
-
-          {/* Test Input */}
-          {embeddingStatus.loaded && (
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="test-text" className="block text-sm font-medium mb-2">
-                  Test Text:
-                </label>
-                <input
-                  id="test-text"
-                  type="text"
-                  value={testText}
-                  onChange={(e) => setTestText(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter text to generate embedding..."
+            {/* Main Grid */}
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* URL Input Section */}
+              <div className={isIdle || isLoading ? 'lg:col-span-2' : ''}>
+                <UrlInput
+                  url={url}
+                  onUrlChange={setUrl}
+                  onStartCrawl={handleStartCrawl}
+                  disabled={isLoading}
+                  isLoading={isLoading}
                 />
               </div>
 
-              <button
-                onClick={handleGenerateEmbedding}
-                disabled={isGenerating || !testText.trim()}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {isGenerating ? 'Generating...' : 'Generate Embedding'}
-              </button>
-
-              {/* Results */}
-              {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
-                  {error}
-                </div>
-              )}
-
-              {embedding && (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-                  <p className="font-medium text-green-900 mb-2">
-                    ✓ Embedding Generated Successfully
-                  </p>
-                  <p className="text-sm text-green-700 mb-2">
-                    Dimensions: {embedding.length}
-                  </p>
-                  <p className="text-xs text-gray-600 font-mono break-all">
-                    [{embedding.slice(0, 10).map(v => v.toFixed(4)).join(', ')}...]
-                  </p>
+              {/* Progress Section */}
+              {!isIdle && (
+                <div className="lg:col-span-2 fade-in-delay-1">
+                  <CrawlProgressDisplay
+                    progress={progress}
+                    document={document}
+                    onReset={handleReset}
+                  />
                 </div>
               )}
             </div>
-          )}
 
-          {/* Loading Indicator */}
-          {embeddingStatus.loading && (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600">Loading embedding model...</p>
-              <p className="text-sm text-gray-500">This may take a minute on first load.</p>
+            {/* Chat Button - Show when crawl is complete */}
+            {isCrawlComplete && (
+              <div className="mt-8 fade-in-delay-2">
+                <button
+                  onClick={() => setMode('config')}
+                  className="btn btn-primary w-full lg:w-auto px-8 py-4"
+                >
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                      />
+                    </svg>
+                    Start Chatting with Documentation
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* Features Grid */}
+            {isIdle && (
+              <div className="mt-12 fade-in-delay-2">
+                <h3 className="text-xl font-semibold text-ink mb-6">
+                  System Capabilities
+                </h3>
+                <div className="grid md:grid-cols-3 gap-6">
+                  <div className="p-6 bg-card border-2 border-border rounded-lg hover:border-amber/30 transition-all duration-300">
+                    <div className="w-12 h-12 mb-4 rounded-lg bg-amber-light flex items-center justify-center">
+                      <svg
+                        className="w-6 h-6 text-amber"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-semibold text-ink mb-2">
+                      Intelligent Crawling
+                    </h4>
+                    <p className="text-sm text-ink-light leading-relaxed">
+                      BFS algorithm processes up to 100 pages with depth limits and scope validation.
+                    </p>
+                  </div>
+
+                  <div className="p-6 bg-card border-2 border-border rounded-lg hover:border-teal/30 transition-all duration-300">
+                    <div className="w-12 h-12 mb-4 rounded-lg bg-teal-light flex items-center justify-center">
+                      <svg
+                        className="w-6 h-6 text-teal"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
+                        />
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-semibold text-ink mb-2">
+                      Client-Side Embeddings
+                    </h4>
+                    <p className="text-sm text-ink-light leading-relaxed">
+                      Generate 384-dimensional vectors using Transformers.js in your browser.
+                    </p>
+                  </div>
+
+                  <div className="p-6 bg-card border-2 border-border rounded-lg hover:border-purple-600/30 transition-all duration-300">
+                    <div className="w-12 h-12 mb-4 rounded-lg bg-purple-50 flex items-center justify-center">
+                      <svg
+                        className="w-6 h-6 text-purple-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
+                        />
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-semibold text-ink mb-2">
+                      Vector Search
+                    </h4>
+                    <p className="text-sm text-ink-light leading-relaxed">
+                      Powered by Supabase with pgvector for semantic similarity search.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Mode: LLM Configuration */}
+        {mode === 'config' && (
+          <div className="max-w-2xl mx-auto fade-in">
+            <div className="library-card">
+              <div className="mb-6">
+                <h2 className="text-3xl font-semibold text-ink mb-2">
+                  Configure AI Provider
+                </h2>
+                <p className="text-ink-light">
+                  Choose your AI provider and enter your API key to start chatting
+                </p>
+              </div>
+
+              <div className="space-y-6">
+                {/* Provider Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-3">
+                    AI Provider
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => setLlmProvider('openai')}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        llmProvider === 'openai'
+                          ? 'border-amber bg-amber-light/50'
+                          : 'border-border bg-card hover:border-amber/30'
+                      }`}
+                    >
+                      <p className="font-semibold text-ink">OpenAI</p>
+                      <p className="text-xs text-ink-light mt-1">GPT-4o Mini</p>
+                    </button>
+                    <button
+                      onClick={() => setLlmProvider('anthropic')}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        llmProvider === 'anthropic'
+                          ? 'border-amber bg-amber-light/50'
+                          : 'border-border bg-card hover:border-amber/30'
+                      }`}
+                    >
+                      <p className="font-semibold text-ink">Anthropic</p>
+                      <p className="text-xs text-ink-light mt-1">Claude 3.5 Haiku</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* API Key Input */}
+                <div>
+                  <label htmlFor="api-key" className="block text-sm font-medium text-ink mb-2">
+                    API Key
+                  </label>
+                  <input
+                    id="api-key"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="input-field"
+                    placeholder={
+                      llmProvider === 'openai' ? 'sk-...' : 'sk-ant-...'
+                    }
+                  />
+                  <p className="mt-2 text-xs text-ink-light/70 italic">
+                    Your API key is stored only in browser memory and never sent to our servers
+                  </p>
+                </div>
+
+                {/* Error Display */}
+                {configError && (
+                  <div className="p-3 bg-red-50 border-2 border-red-200 rounded-lg">
+                    <p className="text-sm text-red-700">{configError}</p>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setMode('crawl')}
+                    className="btn btn-secondary flex-1"
+                  >
+                    <span className="relative z-10">Back</span>
+                  </button>
+                  <button
+                    onClick={handleStartChat}
+                    className="btn btn-primary flex-1"
+                    disabled={!apiKey.trim()}
+                  >
+                    <span className="relative z-10 flex items-center justify-center gap-2">
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 7l5 5m0 0l-5 5m5-5H6"
+                        />
+                      </svg>
+                      Continue to Chat
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="text-center text-sm text-gray-500">
-          <p>Milestone 4: Jina Reader & Crawling System Test</p>
-        </div>
+        {/* Mode: Chat */}
+        {mode === 'chat' && document && (
+          <div className="max-w-5xl mx-auto h-[calc(100vh-200px)] fade-in">
+            <Chat
+              messages={chatHook.messages}
+              onSendMessage={chatHook.sendMessage}
+              isLoading={chatHook.isLoading}
+              error={chatHook.error}
+              onClearMessages={chatHook.clearMessages}
+            />
+          </div>
+        )}
+
+        {/* Footer Info */}
+        <footer className="mt-16 pt-8 border-t-2 border-border text-center">
+          <p className="text-xs text-ink-light mono">
+            MILESTONE 8 · PRODUCTION READY · FULL STACK COMPLETE
+          </p>
+          <p className="text-xs text-ink-light/60 mt-2">
+            Powered by Jina AI Reader · Transformers.js · Supabase · OpenAI · Anthropic
+          </p>
+        </footer>
+      </main>
       </div>
-    </div>
+    </>
   )
 }
 
