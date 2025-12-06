@@ -125,10 +125,8 @@ export async function generateBatchEmbeddings(texts: string[]): Promise<number[]
     throw new Error('Embedding model not initialized')
   }
 
-  // Process texts in batch
-  const embeddings: number[][] = []
-
-  for (const text of texts) {
+  // Process texts in parallel for better performance
+  const embeddingPromises = texts.map(async (text) => {
     const output = await modelPipeline(text, {
       pooling: 'mean',
       normalize: true,
@@ -140,10 +138,10 @@ export async function generateBatchEmbeddings(texts: string[]): Promise<number[]
       throw new Error(`Unexpected embedding dimension: ${embedding.length}. Expected 384.`)
     }
 
-    embeddings.push(embedding)
-  }
+    return embedding
+  })
 
-  return embeddings
+  return await Promise.all(embeddingPromises)
 }
 
 // Clean up resources

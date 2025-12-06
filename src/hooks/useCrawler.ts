@@ -3,12 +3,13 @@ import type { Document, CrawlProgress } from '@/types'
 import { normalizeUrl, computeDocumentKey, isAllowedUrl, extractLinksFromMarkdown } from '@/lib/url-utils'
 import { fetchMarkdownFromUrl } from '@/lib/jina-client'
 import { chunkMarkdown } from '@/lib/chunking'
-import { generateBatchEmbeddings } from '@/lib/embeddings'
+import { generateBatchEmbeddings, initializeEmbeddingModel } from '@/lib/embeddings'
 import { checkDocumentExists, upsertDocument, upsertChunks } from '@/lib/supabase'
 
 const MAX_DISCOVERED = 300
 const MAX_PROCESSED = 100
 const MAX_DEPTH = 3
+const CONCURRENT_REQUESTS = 5
 
 export interface UseCrawlerResult {
   progress: CrawlProgress
@@ -46,6 +47,18 @@ export function useCrawler(): UseCrawlerResult {
       // Normalize seed URL
       const normalizedSeedUrl = normalizeUrl(seedUrl)
       const documentKey = computeDocumentKey(normalizedSeedUrl)
+
+      // Pre-initialize embedding model
+      setProgress({
+        discovered: 0,
+        processed: 0,
+        failed: 0,
+        chunksCreated: 0,
+        status: 'checking',
+        message: 'Loading embedding model (one-time download, ~25 MB)...',
+      })
+
+      await initializeEmbeddingModel()
 
       // Check if document already exists
       setProgress({
@@ -97,48 +110,38 @@ export function useCrawler(): UseCrawlerResult {
 
       let totalChunks = 0
 
-      while (queue.length > 0 && processed.size < MAX_PROCESSED) {
-        const { url: currentUrl, depth } = queue.shift()!
-
-        // Skip if already processed
-        if (processed.has(currentUrl)) {
-          continue
-        }
-
-        // Update progress
-        setProgress(prev => ({
-          ...prev,
-          currentUrl,
-          message: `Processing: ${currentUrl}`,
-        }))
-
+      // Helper function to process a single URL
+      const processSingleUrl = async (
+        currentUrl: string,
+        depth: number
+      ): Promise<{
+        success: boolean
+        url: string
+        error?: string
+        chunks?: number
+        newLinks?: string[]
+      }> => {
         try {
           // Fetch markdown
           const result = await fetchMarkdownFromUrl(currentUrl)
 
           if (!result.success) {
-            failedUrls.push({ url: currentUrl, error: result.error || 'Unknown error' })
-            setProgress(prev => ({
-              ...prev,
-              failed: prev.failed + 1,
-              failedUrls,
-            }))
-            processed.add(currentUrl)
-            continue
+            return {
+              success: false,
+              url: currentUrl,
+              error: result.error || 'Unknown error',
+            }
           }
 
           // Chunk markdown
           const chunks = chunkMarkdown(result.markdown, currentUrl, result.title)
 
           if (chunks.length === 0) {
-            failedUrls.push({ url: currentUrl, error: 'No content chunks created' })
-            setProgress(prev => ({
-              ...prev,
-              failed: prev.failed + 1,
-              failedUrls,
-            }))
-            processed.add(currentUrl)
-            continue
+            return {
+              success: false,
+              url: currentUrl,
+              error: 'No content chunks created',
+            }
           }
 
           // Generate embeddings for all chunks
@@ -155,18 +158,8 @@ export function useCrawler(): UseCrawlerResult {
           // Upsert to Supabase
           await upsertChunks(newDoc.id, chunksWithEmbeddings)
 
-          totalChunks += chunks.length
-          processed.add(currentUrl)
-
-          // Update progress
-          setProgress(prev => ({
-            ...prev,
-            processed: processed.size,
-            chunksCreated: totalChunks,
-            failedUrls,
-          }))
-
-          // Extract and queue new links (if depth allows)
+          // Extract new links if depth allows
+          const newLinks: string[] = []
           if (depth < MAX_DEPTH && discovered.size < MAX_DISCOVERED) {
             const links = extractLinksFromMarkdown(result.markdown, currentUrl)
 
@@ -179,19 +172,7 @@ export function useCrawler(): UseCrawlerResult {
                   !discovered.has(normalizedLink) &&
                   isAllowedUrl(normalizedLink, normalizedSeedUrl, documentKey)
                 ) {
-                  discovered.add(normalizedLink)
-                  queue.push({ url: normalizedLink, depth: depth + 1 })
-
-                  // Update discovered count
-                  setProgress(prev => ({
-                    ...prev,
-                    discovered: discovered.size,
-                  }))
-
-                  // Stop if we've hit the max discovered limit
-                  if (discovered.size >= MAX_DISCOVERED) {
-                    break
-                  }
+                  newLinks.push(normalizedLink)
                 }
               } catch (error) {
                 // Skip invalid links
@@ -199,16 +180,103 @@ export function useCrawler(): UseCrawlerResult {
               }
             }
           }
+
+          return {
+            success: true,
+            url: currentUrl,
+            chunks: chunks.length,
+            newLinks,
+          }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-          failedUrls.push({ url: currentUrl, error: errorMsg })
-          setProgress(prev => ({
-            ...prev,
-            failed: prev.failed + 1,
-            failedUrls,
-          }))
-          processed.add(currentUrl)
+          return {
+            success: false,
+            url: currentUrl,
+            error: errorMsg,
+          }
         }
+      }
+
+      // Process URLs in parallel batches
+      while (queue.length > 0 && processed.size < MAX_PROCESSED) {
+        // Create batch of URLs to process
+        const batch: Array<{ url: string; depth: number }> = []
+        while (
+          batch.length < CONCURRENT_REQUESTS &&
+          queue.length > 0 &&
+          processed.size + batch.length < MAX_PROCESSED
+        ) {
+          const item = queue.shift()!
+          if (!processed.has(item.url)) {
+            batch.push(item)
+          }
+        }
+
+        if (batch.length === 0) {
+          break
+        }
+
+        // Update progress with first URL in batch
+        setProgress(prev => ({
+          ...prev,
+          currentUrl: batch[0].url,
+          message: `Processing ${batch.length} page${batch.length > 1 ? 's' : ''} in parallel...`,
+        }))
+
+        // Process batch in parallel
+        const results = await Promise.allSettled(
+          batch.map(item => processSingleUrl(item.url, item.depth))
+        )
+
+        // Handle results and update shared state
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i]
+          const { url, depth } = batch[i]
+
+          processed.add(url)
+
+          if (result.status === 'fulfilled') {
+            const urlResult = result.value
+
+            if (urlResult.success) {
+              // Success - update chunks and add new links
+              totalChunks += urlResult.chunks || 0
+
+              // Add new links to queue
+              if (urlResult.newLinks && urlResult.newLinks.length > 0) {
+                for (const link of urlResult.newLinks) {
+                  if (!discovered.has(link) && discovered.size < MAX_DISCOVERED) {
+                    discovered.add(link)
+                    queue.push({ url: link, depth: depth + 1 })
+
+                    if (discovered.size >= MAX_DISCOVERED) {
+                      break
+                    }
+                  }
+                }
+              }
+            } else {
+              // Failed with error
+              failedUrls.push({ url: urlResult.url, error: urlResult.error || 'Unknown error' })
+            }
+          } else {
+            // Promise rejected
+            failedUrls.push({
+              url,
+              error: result.reason instanceof Error ? result.reason.message : 'Unknown error',
+            })
+          }
+        }
+
+        // Update progress after batch
+        setProgress(prev => ({
+          ...prev,
+          discovered: discovered.size,
+          processed: processed.size,
+          failed: failedUrls.length,
+          chunksCreated: totalChunks,
+          failedUrls,
+        }))
       }
 
       // Check if we have enough chunks
