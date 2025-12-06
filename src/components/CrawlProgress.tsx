@@ -8,7 +8,7 @@ interface CrawlProgressProps {
 
 // Component for displaying crawl progress and results
 export function CrawlProgressDisplay({ progress, document, onReset }: CrawlProgressProps) {
-  const { status, discovered, processed, failed, chunksCreated, message, currentUrl, failedUrls } = progress
+  const { status, discovered, processed, failed, chunksCreated, message, currentUrl, failedUrls, discoveredUrls } = progress
 
   // Calculate progress percentage
   const progressPercent = discovered > 0 ? (processed / discovered) * 100 : 0
@@ -139,6 +139,87 @@ export function CrawlProgressDisplay({ progress, document, onReset }: CrawlProgr
             </div>
           </div>
         </div>
+      )}
+
+      {/* Discovered URLs Catalog */}
+      {discoveredUrls && discoveredUrls.length > 0 && (
+        <details className="mb-6 catalog-drawer group" open={status === 'crawling'}>
+          <summary className="catalog-drawer-label">
+            <div className="flex items-center gap-3">
+              <svg
+                className="w-5 h-5 transition-transform duration-300 group-open:rotate-90"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-ink">
+                  Page Catalog
+                </h3>
+                <p className="text-xs text-ink-light mt-0.5">
+                  {discoveredUrls.length} pages discovered
+                </p>
+              </div>
+            </div>
+          </summary>
+
+          <div className="catalog-drawer-content">
+            <div className="catalog-cards">
+              {discoveredUrls.slice(0, 50).map((url, idx) => (
+                <div
+                  key={url}
+                  className="catalog-card"
+                  style={{
+                    animationDelay: `${Math.min(idx * 50, 1000)}ms`,
+                  }}
+                >
+                  <div className="catalog-card-header">
+                    <span className="catalog-card-number">
+                      {String(idx + 1).padStart(3, '0')}
+                    </span>
+                    <div className="catalog-card-status">
+                      {idx < processed ? (
+                        <span className="status-processed">✓</span>
+                      ) : (
+                        <span className="status-pending">◦</span>
+                      )}
+                    </div>
+                  </div>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="catalog-card-url"
+                    title={url}
+                  >
+                    {url}
+                  </a>
+                </div>
+              ))}
+              {discoveredUrls.length > 50 && (
+                <div className="catalog-card catalog-card-overflow">
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-amber mb-1">
+                        +{discoveredUrls.length - 50}
+                      </p>
+                      <p className="text-xs text-ink-light uppercase tracking-wide">
+                        More Pages
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </details>
       )}
 
       {/* Failed URLs */}

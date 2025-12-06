@@ -35,6 +35,7 @@ export interface CrawlProgress {
   message?: string
   currentUrl?: string
   failedUrls?: Array<{ url: string; error: string }>
+  discoveredUrls?: string[]
 }
 
 export type LLMProvider = 'openai' | 'anthropic' | 'custom'

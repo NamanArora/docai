@@ -10,6 +10,7 @@ const MAX_DISCOVERED = 300
 const MAX_PROCESSED = 100
 const MAX_DEPTH = 3
 const CONCURRENT_REQUESTS = 5
+const REQUESTS_PER_MINUTE = 20 // Jina API rate limit
 
 export interface UseCrawlerResult {
   progress: CrawlProgress
@@ -224,6 +225,10 @@ export function useCrawler(): UseCrawlerResult {
         }
       }
 
+      // Rate limiting setup
+      const minDelayBetweenRequests = (60 * 1000) / REQUESTS_PER_MINUTE // ms between requests
+      let lastBatchTime = 0
+
       // Process URLs in parallel batches
       while (queue.length > 0 && processed.size < MAX_PROCESSED) {
         // Create batch of URLs to process
@@ -242,6 +247,22 @@ export function useCrawler(): UseCrawlerResult {
         if (batch.length === 0) {
           break
         }
+
+        // Rate limiting: ensure minimum delay between batches
+        if (lastBatchTime > 0) {
+          const timeSinceLastBatch = Date.now() - lastBatchTime
+          const delayNeeded = (minDelayBetweenRequests * batch.length) - timeSinceLastBatch
+
+          if (delayNeeded > 0) {
+            setProgress(prev => ({
+              ...prev,
+              message: `Rate limiting: waiting ${Math.ceil(delayNeeded / 1000)}s...`,
+            }))
+            await new Promise(resolve => setTimeout(resolve, delayNeeded))
+          }
+        }
+
+        lastBatchTime = Date.now()
 
         // Update progress with first URL in batch
         setProgress(prev => ({
@@ -303,6 +324,7 @@ export function useCrawler(): UseCrawlerResult {
           failed: failedUrls.length,
           chunksCreated: totalChunks,
           failedUrls,
+          discoveredUrls: Array.from(discovered),
         }))
       }
 

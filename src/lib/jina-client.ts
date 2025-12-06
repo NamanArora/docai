@@ -1,6 +1,5 @@
 // Jina AI Reader client for fetching markdown from URLs
 const JINA_READER_BASE_URL = 'https://r.jina.ai'
-const JINA_API_KEY = import.meta.env.VITE_JINA_API_KEY
 
 export interface JinaReaderResponse {
   code: number
@@ -34,7 +33,6 @@ export async function fetchMarkdownFromUrl(url: string): Promise<FetchMarkdownRe
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-        'Authorization': `Bearer ${JINA_API_KEY}`,
         'X-Return-Format': 'markdown',
         'X-Robots-Txt': 'JinaReader',
       },

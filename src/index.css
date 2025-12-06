@@ -633,6 +633,167 @@
     border-width: 0;
   }
 
+  /* Catalog Drawer - Library Card Index System */
+  .catalog-drawer {
+    @apply bg-parchment-dark/40 border-2 border-border rounded-lg overflow-hidden;
+    @apply transition-all duration-300;
+  }
+
+  .catalog-drawer-label {
+    @apply p-4 cursor-pointer select-none;
+    @apply hover:bg-parchment-dark/60 transition-all duration-200;
+    @apply flex items-center gap-3;
+  }
+
+  .catalog-drawer-label::-webkit-details-marker {
+    display: none;
+  }
+
+  .catalog-drawer-content {
+    @apply px-4 pb-4;
+    animation: drawerSlide 0.3s ease-out;
+  }
+
+  @keyframes drawerSlide {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Catalog Cards Grid */
+  .catalog-cards {
+    @apply grid gap-3 mt-4;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    max-height: 500px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--amber) / 0.3) transparent;
+  }
+
+  .catalog-cards::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .catalog-cards::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .catalog-cards::-webkit-scrollbar-thumb {
+    background: hsl(var(--amber) / 0.3);
+    border-radius: 3px;
+  }
+
+  .catalog-cards::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--amber) / 0.5);
+  }
+
+  /* Individual Catalog Card */
+  .catalog-card {
+    @apply bg-card border-2 border-border rounded-lg p-3;
+    @apply shadow-sm hover:shadow-md;
+    @apply transition-all duration-300;
+    position: relative;
+    animation: cardSlideIn 0.4s ease-out backwards;
+  }
+
+  @keyframes cardSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .catalog-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+      hsl(var(--amber) / 0.5) 0%,
+      hsl(var(--teal) / 0.5) 100%
+    );
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+
+  .catalog-card:hover {
+    @apply border-amber/40 shadow-lg;
+    transform: translateY(-2px);
+  }
+
+  .catalog-card-header {
+    @apply flex items-center justify-between mb-2 pb-2;
+    @apply border-b border-border/50;
+  }
+
+  .catalog-card-number {
+    @apply text-xs font-bold text-amber mono;
+    @apply px-2 py-1 bg-amber-light/50 rounded;
+    letter-spacing: 0.05em;
+  }
+
+  .catalog-card-status {
+    @apply flex items-center;
+  }
+
+  .status-processed {
+    @apply text-sm font-bold text-green-600;
+  }
+
+  .status-pending {
+    @apply text-sm text-ink-light/40;
+  }
+
+  .catalog-card-url {
+    @apply block text-sm text-ink-light hover:text-teal;
+    @apply transition-colors duration-200;
+    @apply truncate;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    line-height: 1.4;
+  }
+
+  .catalog-card-url:hover {
+    @apply underline decoration-dotted;
+  }
+
+  /* Overflow Card for +N More */
+  .catalog-card-overflow {
+    @apply bg-gradient-to-br from-amber-light/30 to-teal-light/30;
+    @apply border-dashed border-amber/40;
+  }
+
+  .catalog-card-overflow:hover {
+    @apply border-amber;
+    @apply from-amber-light/50 to-teal-light/50;
+  }
+
+  /* Responsive Adjustments */
+  @media (max-width: 768px) {
+    .catalog-cards {
+      grid-template-columns: 1fr;
+      max-height: 400px;
+    }
+
+    .catalog-card {
+      @apply p-2.5;
+    }
+
+    .catalog-card-url {
+      font-size: 0.65rem;
+    }
+  }
+
   /* Print Styles */
   @media print {
     .no-print {
@@ -645,6 +806,14 @@
 
     .message-container {
       break-inside: avoid;
+    }
+
+    .catalog-drawer {
+      break-inside: avoid;
+    }
+
+    .catalog-cards {
+      max-height: none;
     }
   }
 }
