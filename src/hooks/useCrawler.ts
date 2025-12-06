@@ -4,7 +4,7 @@ import { normalizeUrl, computeDocumentKey, isAllowedUrl, extractLinksFromMarkdow
 import { fetchMarkdownFromUrl } from '@/lib/jina-client'
 import { chunkMarkdown } from '@/lib/chunking'
 import { generateBatchEmbeddings, initializeEmbeddingModel } from '@/lib/embeddings'
-import { checkDocumentExists, upsertDocument, upsertChunks } from '@/lib/supabase'
+import { checkDocumentExists, upsertDocument, upsertChunks, deleteDocument } from '@/lib/supabase'
 
 const MAX_DISCOVERED = 300
 const MAX_PROCESSED = 100
@@ -14,7 +14,7 @@ const CONCURRENT_REQUESTS = 5
 export interface UseCrawlerResult {
   progress: CrawlProgress
   document: Document | null
-  startCrawl: (url: string) => Promise<void>
+  startCrawl: (url: string, forceReindex?: boolean) => Promise<void>
   reset: () => void
 }
 
@@ -42,7 +42,7 @@ export function useCrawler(): UseCrawlerResult {
   }
 
   // Start crawling process
-  const startCrawl = async (seedUrl: string) => {
+  const startCrawl = async (seedUrl: string, forceReindex = false) => {
     try {
       // Normalize seed URL
       const normalizedSeedUrl = normalizeUrl(seedUrl)
@@ -72,7 +72,8 @@ export function useCrawler(): UseCrawlerResult {
 
       const existingDoc = await checkDocumentExists(documentKey)
 
-      if (existingDoc) {
+      // If document exists and NOT forcing reindex, return early
+      if (existingDoc && !forceReindex) {
         setDocument(existingDoc)
         setProgress({
           discovered: 0,
@@ -83,6 +84,32 @@ export function useCrawler(): UseCrawlerResult {
           message: 'Documentation already indexed',
         })
         return
+      }
+
+      // If document exists and forcing reindex, delete it first
+      if (existingDoc && forceReindex) {
+        try {
+          setProgress({
+            discovered: 0,
+            processed: 0,
+            failed: 0,
+            chunksCreated: 0,
+            status: 'checking',
+            message: 'Deleting existing documentation...',
+          })
+
+          await deleteDocument(documentKey)
+        } catch (error) {
+          setProgress({
+            discovered: 0,
+            processed: 0,
+            failed: 0,
+            chunksCreated: 0,
+            status: 'error',
+            message: `Failed to delete: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          })
+          return
+        }
       }
 
       // Create new document

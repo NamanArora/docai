@@ -7,6 +7,8 @@ import { CrawlProgressDisplay } from './components/CrawlProgress'
 import { Chat } from './components/Chat'
 import { ToastContainer } from './components/Toast'
 import { validateApiKey, type LLMProvider } from './lib/llm-client'
+import { computeDocumentKey, normalizeUrl } from './lib/url-utils'
+import { checkDocumentExists } from './lib/supabase'
 
 type Mode = 'crawl' | 'config' | 'chat'
 
@@ -21,6 +23,10 @@ function App() {
   const [llmProvider, setLlmProvider] = useState<LLMProvider>('openai')
   const [apiKey, setApiKey] = useState('')
   const [configError, setConfigError] = useState('')
+
+  // Force Reindex state
+  const [documentExists, setDocumentExists] = useState(false)
+  const [showReindexConfirm, setShowReindexConfirm] = useState(false)
 
   // Chat hook - only initialize if we have a document
   const chatHook = useChat({
@@ -47,6 +53,28 @@ function App() {
     }
   }, [progress.status, progress.message, toast])
 
+  // Check if document exists for current URL
+  useEffect(() => {
+    const checkUrlExists = async () => {
+      if (!url.trim()) {
+        setDocumentExists(false)
+        return
+      }
+
+      try {
+        const normalized = normalizeUrl(url)
+        const docKey = computeDocumentKey(normalized)
+        const exists = await checkDocumentExists(docKey)
+        setDocumentExists(!!exists)
+      } catch {
+        setDocumentExists(false)
+      }
+    }
+
+    const timeoutId = setTimeout(checkUrlExists, 500)
+    return () => clearTimeout(timeoutId)
+  }, [url])
+
   const handleStartCrawl = async () => {
     if (!url.trim()) return
     await startCrawl(url)
@@ -57,6 +85,20 @@ function App() {
     setMode('crawl')
     chatHook.clearMessages()
     toast.info('Reset to start new crawl')
+  }
+
+  const handleForceReindex = () => {
+    setShowReindexConfirm(true)
+  }
+
+  const handleConfirmReindex = async () => {
+    setShowReindexConfirm(false)
+    if (!url.trim()) return
+    await startCrawl(url, true) // true = force reindex
+  }
+
+  const handleCancelReindex = () => {
+    setShowReindexConfirm(false)
   }
 
   const handleStartChat = () => {
@@ -128,8 +170,10 @@ function App() {
                   url={url}
                   onUrlChange={setUrl}
                   onStartCrawl={handleStartCrawl}
+                  onForceReindex={handleForceReindex}
                   disabled={isLoading}
                   isLoading={isLoading}
+                  documentExists={documentExists}
                 />
               </div>
 
@@ -388,6 +432,60 @@ function App() {
         </footer>
       </main>
       </div>
+
+      {/* Confirmation Dialog for Force Reindex */}
+      {showReindexConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="library-card max-w-md m-4 fade-in">
+            <div className="mb-6">
+              <h3 className="text-2xl font-semibold text-ink mb-2">
+                Confirm Force Reindex
+              </h3>
+              <p className="text-ink-light leading-relaxed">
+                This will permanently delete all existing chunks and embeddings for this documentation,
+                then re-crawl and re-index from scratch.
+              </p>
+            </div>
+
+            <div className="p-4 bg-amber-light/30 border-l-4 border-amber rounded-r mb-6">
+              <p className="text-sm text-ink-light">
+                <strong className="text-ink">Warning:</strong> This action cannot be undone.
+                The re-indexing process may take several minutes.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelReindex}
+                className="btn btn-secondary flex-1"
+              >
+                <span className="relative z-10">Cancel</span>
+              </button>
+              <button
+                onClick={handleConfirmReindex}
+                className="btn btn-primary flex-1"
+              >
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Confirm Reindex
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

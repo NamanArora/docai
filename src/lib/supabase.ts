@@ -26,6 +26,16 @@ export async function checkDocumentExists(documentKey: string): Promise<Document
   return data
 }
 
+// Delete document by document_key (CASCADE deletes sections automatically)
+export async function deleteDocument(documentKey: string): Promise<void> {
+  const { error } = await supabase
+    .from('documents')
+    .delete()
+    .eq('document_key', documentKey)
+
+  if (error) throw error
+}
+
 // Create or update document
 export async function upsertDocument(documentKey: string, rootUrl: string): Promise<Document> {
   const { data, error } = await supabase
